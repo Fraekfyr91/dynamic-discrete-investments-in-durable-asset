@@ -12,7 +12,8 @@ classdef equilibrium
 properties (Constant)
   % Constant properties of the equilibrium class (can only be modified here)
   verbosity=1;        % 0 (no output), 1 (output on)
-  options= optimoptions('fsolve','TolFun',2.8e-6,'TolX',1e-12, 'Display','off');
+  %options= optimoptions('fsolve','TolFun',2.8e-6,'TolX',1e-12, 'Display','off');
+  options= optimoptions('fsolve','TolFun',8e-8,'TolX',1e-12, 'Display','off');
   tolerance=0.01;     % solution tolerance: equilibrium not considered solved if max(abs(ed)) > equilibrium.tolerance
 end
 

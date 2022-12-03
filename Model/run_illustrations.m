@@ -12,7 +12,7 @@ close all;
 % common
 mp = setparams.default(); % parameters used for illustration
 mp.ntypes = 2;
-mp.nhousetypes=1; % switch to 1 property type
+mp.nhousetypes=2; % switch to 1 property type
 mp.lbl_cartypes = {' '}; % no label for the only house
 s = trmodel.index(mp);
 

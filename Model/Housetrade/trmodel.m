@@ -601,16 +601,16 @@ methods (Static)
 
       % utility of trading and upgrading
       B = trmodel.u_house(mp, s.id.age(s.id.upgrade{j}), tau, j) ...
-                                      + ev_scrap-mp.mum{tau}*mp.pupgrade * s.id.age(s.id.upgrade{j}) -mp.mum{tau}*(pbuy(:,s.id.trade{j})-psell+mp.pupgrade) ...
+                                      + ev_scrap-mp.mum{tau}*mp.pupgrade * flipud(s.id.age(s.id.upgrade{j})')' -mp.mum{tau}*(pbuy(:,s.id.trade{j})-psell+mp.pupgrade) ...
                                       -mp.psych_transcost{tau};
       % Add the utility to avoid a extra loop
       u(: , s.id.trade{j}, s.id.upgrade{j})       = u(:, s.id.trade{j}, s.id.upgrade{j})+B;
 
       % utilty of keeping and upgrading 
       u(: , s.id.keep, s.id.upgrade{j})           =  trmodel.u_house(mp, s.id.age(s.id.upgrade{j}), tau, j) ...
-                                      + ev_scrap-mp.mum{tau}*mp.pupgrade-mp.psych_transcost{tau};
+                                      + ev_scrap-mp.mum{tau}*mp.pupgrade* flipud(s.id.age(s.id.upgrade{j})')'-mp.psych_transcost{tau};
     end % end loop over house-types
-
+ 
     % utility of purging (i.e. selling/scrapping the current house and not replacing it, i.e. switching to the outside good)
     u(:, s.id.purge, s.id.purge)                  =  mp.u_og{tau} + mp.mum{tau}*psell + ev_scrap;   
 

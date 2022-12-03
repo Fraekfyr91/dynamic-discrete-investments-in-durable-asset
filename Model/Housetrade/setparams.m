@@ -11,7 +11,7 @@ methods (Static)
     % See also trmodel.setparams to get list of acctive parameters used in trmodel (all set to zero)
     
     mp.modeltype = 'reducedform'; % uses u_0 and u_a, not the "deep" structural parameters
-    mp.pupgrade = 100; % price of upgrading house 
+    mp.pupgrade = 2; % price of upgrading house 
     mp.lbl_housetypes={'Luxury', 'Normal'}; % house type labels 
     mp.abar_j0 = {25,25};                 % house specific value of abar 
     mp.nhousetypes=numel(mp.abar_j0);       % number of house types 
@@ -34,10 +34,16 @@ methods (Static)
 
     % tax policy parameters (must be before specification of prices of fuel and cars)
     mp.vat       =   25/100;     % value added tax
-    mp.housetax_lo =  105/100;   % registration tax (below kink, K_housetax_hi)
-    mp.housetax_hi =  180/100;   % registration tax (above kink, K_housetax_hi)
+
+    mp.housetax_lo =  100/100;   % registration tax (below kink, K_housetax_hi)
+    mp.housetax_hi =  100/100;   % registration tax (above kink, K_housetax_hi)
     mp.tax_fuel  =  100/100;     % proportional fuel tax 
-    mp.K_housetax_hi = 81;       % mp.K_housetax_hi before mp.housetax_hi tax kicks in
+    mp.K_housetax_hi = 1;       % mp.K_housetax_hi before mp.housetax_hi tax kicks in
+
+    %mp.housetax_lo =  105/100;   % registration tax (below kink, K_housetax_hi)
+    %mp.housetax_hi =  180/100;   % registration tax (above kink, K_housetax_hi)
+    %mp.tax_fuel  =  100/100;     % proportional fuel tax 
+    %mp.K_housetax_hi = 81;       % mp.K_housetax_hi before mp.housetax_hi tax kicks in
         
     % Prices before taxes (prices after taxes are computed when solving the model)
     mp.pnew={200,260};      % new house prices (housetype specific)
