@@ -11,9 +11,12 @@ classdef equilibrium
 
 properties (Constant)
   % Constant properties of the equilibrium class (can only be modified here)
-  verbosity=1;        % 0 (no output), 1 (output on)
-  %options= optimoptions('fsolve','TolFun',2.8e-6,'TolX',1e-12, 'Display','off');
-  options= optimoptions('fsolve','TolFun',8e-8,'TolX',1e-12, 'Display','off');
+  verbosity=0;        % 0 (no output), 1 (output on)
+  options= optimoptions('fsolve','TolFun',1e-3,'TolX',1e-12, 'Display','off')
+  %options= optimoptions('fsolve','TolFun',1e-7,'TolX',1e-12, 'DiffMaxChange', 0.001,'PlotFcn',@optimplotfirstorderopt)
+  
+  %options= optimoptions('fsolve','Jacobian','off','TolFun',1e-6,'TolX',1e-12, 'Display','off','PlotFcn',@optimplotfirstorderopt);
+  %options= optimoptions('fsolve','Jacobian','off','TolFun',1e-6,'TolX',1e-12, 'Display','off');
   tolerance=0.01;     % solution tolerance: equilibrium not considered solved if max(abs(ed)) > equilibrium.tolerance
 end
 
@@ -145,31 +148,42 @@ methods (Static)
     % SYNTAX:    [p0] = equilibrium.price_init(mp, s)
 
     p0=nan(s.np,1);
+
     [abar_spp, p_spp, w_spp]=spp.solve_spp(mp);
-    
+  
     % use social planner solution as starting values for p0
     for j=1:mp.nhousetypes
+        p_temp = nan(s.np,mp.ntypes);
         
         [abar_j_spp, tau_j]=max([abar_spp{:,j}]);
         
         if abar_j_spp > mp.abar_j0{j};
           fprintf('WARNING: Social planner solution not consistent with mp.abar_j0: abar_j_spp=%d > mp.abar_j0=%d \nTruncating price vector - consider increasing mp.abar_j0\n', abar_j_spp, mp.abar_j0{j})
         end
-        pj_spp=ones(1000,1)*mp.pscrap{j};
+        pj_spp=ones(1000,mp.ntypes)*mp.pscrap{j};
+        for tau=1:mp.ntypes
+           
+            pj_spp(1:abar_spp{tau,j}-1, tau)=p_spp{tau, j}(2:abar_spp{tau,j});
+            p_temp(s.ip{j},tau)=smooth(pj_spp(1:mp.abar_j0{j}-1, tau), 10);
+        end
+        weights_numeric = 1 ./cell2mat(mp.mum) ;
+        weights_numeric = weights_numeric .* mp.tw ;
+        weights_normalized = weights_numeric / sum(weights_numeric);
         
-        pj_spp(1:abar_j_spp-1)=p_spp{tau_j, j}(2:abar_j_spp);
-        
-        p0(s.ip{j})=pj_spp(1:mp.abar_j0{j}-1); 
-    end
-  end
+        p =p_temp*weights_normalized;
+        p0(s.ip{j}) = p(s.ip{j});
 
+    end
+
+  end
+ 
   function [sol]=solve_once(mp, s, p0);
     % equilibrium.solve_once: solves for the equilibrium (with no check for convergence)
     % equilibrium.solve_once us called equilibrium.solve and has same syntax, inputs and outputs
     % 
     % SYNTAX, INPUTS and OUTPUTS: same equilibrium.solve          
     % see also equilibrium.solve, equilibrium.print, equilibrium.edf
-
+    
     mp=trmodel.update_mp(mp);  % update parameters dependencies 
 
     % starting values for p0
@@ -179,7 +193,6 @@ methods (Static)
     end
     if nargin<=2 || isempty(p0)
       p0 = equilibrium.price_init(mp,s);
-      
     end
     
     if (equilibrium.verbosity>0);
@@ -201,18 +214,17 @@ methods (Static)
       exitflag = 1; 
       output=nan;
     else
-      
       [p,ed,exitflag,output]=fsolve(@(p) equilibrium.edf(mp, s, p),p0, equilibrium.options);
     end
     
-    [ed, ded, sol]=equilibrium.edf(mp, s, p);
+    [ed, sol]=equilibrium.edf(mp, s, p);
     sol.p=p;
     sol.exitflag=exitflag;
     sol.output=output;
   end % end of solve
 
-  function [ed, ded, sol]=edf(mp, s, p)
-    
+  function [ed, sol]=edf(mp, s, p)
+
     % equilibrium.edf: evaluation of excess demand function (ed), its derivatives (ded) and the solution structure (sol)
     %        at a given price vector, p
     %        ed is evaluated by first solving the consumer DP problem and evaluating the choice probabilities
@@ -286,7 +298,7 @@ methods (Static)
         bellman=@(ev) trmodel.bellman(mp, s, util_tau{t}, F, ev);
         
         [ev_tau{t}, ccp_tau{t}]= dpsolver.poly(bellman, ev0{t}, [], mp.bet);
-
+    
         % trade, keep and scrap transition matrices
         [delta_tau{t}, deltaK_tau{t}, deltaT_tau{t}, delta_scrap{t}, deltaTU{t}, deltaU{t}]=trmodel.trade_transition(mp, s, ccp_tau{t}, ccp_scrap_tau{t});
         % state transition matrix
@@ -297,6 +309,7 @@ methods (Static)
 
         % step 2: compute contributions to excess demand for each consumer type       
         idx=[s.is.house_ex_scrap{:}];
+        %ed_tau(:,t)=deltaT_tau{t}(:,idx)'*q_tau{t} - (1-ccp_tau{t}(idx, s.id.keep)).*(1-ccp_scrap_tau{t}(idx,:)).*q_tau{t}(idx);
         ed_tau(:,t)=deltaT_tau{t}(:,idx)'*q_tau{t} + deltaTU{t}(:,idx)'*q_tau{t} - (1-(1-sum(permute(ccp_tau{1}(idx,s.id.keep,idx),[1,3,2]),1))').*(1-ccp_scrap_tau{t}(idx,:)).*q_tau{t}(idx);
       end;
     
@@ -305,7 +318,6 @@ methods (Static)
     
     % cumulate excess demand for all relevant ages of used houses that can be purchased, over all types of consumers
     ed=ed_tau*mp.tw; 
-    
     % update starting values for ev. (used for next evaluation of edf)
     ev0=ev_tau;
 
@@ -318,13 +330,14 @@ methods (Static)
       [marketshares] = equilibrium.marketshares(mp, s, h_tau);
       
 
-      fields={'p', 'ed', 'F', 'q_tau', 'q', 'ev_tau', 'ccp_tau', 'ccp_scrap_tau', 'ctp_tau', 'delta_tau','deltaT_tau', 'deltaK_tau', 'deltaTU_tau', 'deltaU_tau', 'h_tau', 'marketshares'};
-      sol=cell2struct({p, ed, F, q_tau, q, ev_tau, ccp_tau, ccp_scrap_tau, ctp_tau, delta_tau, deltaT_tau, deltaK_tau, deltaTU_tau, deltaU_tau, h_tau, marketshares}, fields, 2);
+      fields={'p', 'ed', 'F', 'q_tau', 'q', 'ev_tau', 'ccp_tau', 'ccp_scrap_tau', 'ctp_tau', 'delta_tau','deltaT_tau', 'deltaK_tau', 'deltaTU_tau', 'deltaU_tau', 'h_tau', 'marketshares', 'util_tau'};
+      sol=cell2struct({p, ed, F, q_tau, q, ev_tau, ccp_tau, ccp_scrap_tau, ctp_tau, delta_tau, deltaT_tau, deltaK_tau, deltaTU_tau, deltaU_tau, h_tau, marketshares, util_tau}, fields, 2);
 
       % return excess demand and derivative of excess demand for the price vector p for each consumer type
       % derivative is not finished and can be done to optimize speed
-      grad_dp=g_trmodel.partial_deriv(mp, s, sol,'prices');
-      ded=grad_dp.ed;
+      %grad_dp=g_trmodel.partial_deriv(mp, s, sol,'prices');
+      %ded=grad_dp.ed;
+     
     end 
   end % end of edf
 

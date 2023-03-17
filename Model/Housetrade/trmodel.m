@@ -23,6 +23,7 @@ methods (Static)
     mp.es=1;          % use model with endogenous scrapage if 1 
     mp.fixprices=0;   % set to zero, to compute model solution at a given set of prices without solving for equilibrium 
     mp.ll_scrap=true; % add scrap decisions to likelihood if true
+    mp.up=1;          % use model upgrade as policy rule
     % ******************************************
     % misc. parameters
     % ******************************************
@@ -161,11 +162,12 @@ methods (Static)
     % When implementing new taxes/subsidies remember to update the corresponding after tax function below. 
 
     % fuel prices before taxes
-    p_fuel_notax=mp.p_fuel/(1+mp.tax_fuel);  
+
+    
           
     pnew_notax = cell(1, mp.nhousetypes); 
     for house=1:mp.nhousetypes 
-
+      p_fuel_notax{house}=mp.p_fuel{house}/(1+mp.tax_fuel);  
       pnew_notax{house} = trmodel.phouse_notax(mp.pnew{house}, mp.K_housetax_hi, mp.housetax_lo, mp.housetax_hi, mp.vat);
     
       % scrap price before tax: not currently implemented 
@@ -214,12 +216,13 @@ methods (Static)
     % price_aftertax(): This function computes prices after taxes given before tax prices and tax rates in mp
     % When implemneting new taxes/subisdies remember to update the correspoding after tax function below. 
 
-    p_fuel  = mp.p_fuel_notax*(1+mp.tax_fuel); % scalar 
+    
           
     pnew    = cell(1, mp.nhousetypes); 
     pscrap  = cell(1, mp.nhousetypes); 
     
     for ihouse=1:mp.nhousetypes
+      p_fuel{ihouse}  = mp.p_fuel_notax{ihouse}*(1+mp.tax_fuel); % scalar 
 
       pnew_notax = trmodel.phouse_after_passthrough(mp.pnew_notax{ihouse}, mp, ihouse); 
 
@@ -593,35 +596,40 @@ methods (Static)
     
     for j=1:mp.nhousetypes
       % utility of keeping (when feasible)
-      u(s.is.house_ex_scrap{j}, s.id.keep, s.id.keep) =  trmodel.u_house(mp, s.is.age(s.is.house_ex_scrap{j}), tau, j);
+      u(s.is.house_ex_scrap{j}, s.id.keep, s.id.keep) = trmodel.u_house(mp, s.is.age(s.is.house_ex_scrap{j}), tau, j);
       
       % utility of trading and not upgrading
-      u(: , s.id.trade{j}, s.id.keep)                 =  trmodel.u_house(mp, s.id.age(s.id.trade{j}), tau, j) ...
+      u(: , s.id.trade{j}, s.id.keep) = trmodel.u_house(mp, s.id.age(s.id.trade{j}), tau, j) ...
                                       + ev_scrap-mp.mum{tau}*(pbuy(:,s.id.trade{j})-psell)-mp.psych_transcost{tau};
 
       % utility of trading and upgrading
       B = trmodel.u_house(mp, s.id.age(s.id.upgrade{j}), tau, j) ...
-                                      + ev_scrap-mp.mum{tau}*mp.pupgrade * flipud(s.id.age(s.id.upgrade{j})')' -mp.mum{tau}*(pbuy(:,s.id.trade{j})-psell+mp.pupgrade) ...
+                                      + ev_scrap - mp.mum{tau}*(pbuy(:,s.id.trade{j})-psell + mp.pupgrade *(mp.pupfix + abs(flipud(s.id.age(s.id.upgrade{j})')'-s.id.trade{j})) )...
                                       -mp.psych_transcost{tau};
+      
       % Add the utility to avoid a extra loop
-      u(: , s.id.trade{j}, s.id.upgrade{j})       = u(:, s.id.trade{j}, s.id.upgrade{j})+B;
+      u(: , s.id.trade{j}, s.id.upgrade{j}) = u(:, s.id.trade{j}, s.id.upgrade{j})+B;
 
       % utilty of keeping and upgrading 
-      u(: , s.id.keep, s.id.upgrade{j})           =  trmodel.u_house(mp, s.id.age(s.id.upgrade{j}), tau, j) ...
-                                      + ev_scrap-mp.mum{tau}*mp.pupgrade* flipud(s.id.age(s.id.upgrade{j})')'-mp.psych_transcost{tau};
+      u(: , s.id.keep, s.id.upgrade{j}) = trmodel.u_house(mp, s.id.age(s.id.upgrade{j}), tau, j) ...
+                                      + ev_scrap-mp.mum{tau}* mp.pupgrade * (mp.pupfix +abs((flipud(s.id.age(s.id.upgrade{j})')'-s.id.keep)))-mp.psych_transcost{tau};
     end % end loop over house-types
  
+   
     % utility of purging (i.e. selling/scrapping the current house and not replacing it, i.e. switching to the outside good)
-    u(:, s.id.purge, s.id.purge)                  =  mp.u_og{tau} + mp.mum{tau}*psell + ev_scrap;   
+    u(:, :, s.id.purge) = nan;
+    %u(:, s.id.purge, :) = nan;
 
+    u(:, s.id.purge, s.id.purge)                  =  mp.u_og{tau} + mp.mum{tau}*psell + ev_scrap;   
+    
     % additional psych transactions cost and monetary search cost incurred
     % by a consumer who has no house
-    u(s.is.nohouse, [s.id.trade{:}], s.is.nohouse)   =  u(s.is.nohouse , [s.id.trade{:}], s.is.nohouse) ... 
-                                             -  mp.psych_transcost_nohouse{tau} - mp.mum{tau}*mp.nohousesc; 
+    u(s.is.nohouse, [s.id.trade{:}], :) = u(s.is.nohouse , [s.id.trade{:}], :) ... 
+                                        -  mp.psych_transcost_nohouse{tau} - mp.mum{tau}*mp.nohousesc; 
     
-    u([s.is.scrap{:}] , s.id.keep, s.id.keep)  =  nan; % not possible to keep scrap
+    u([s.is.scrap{:}] , s.id.keep, :) = nan; % not possible to keep scrap
 
-    u(s.is.nohouse , s.id.keep, s.id.keep)         =  nan; % not possible to keep no house
+    u(s.is.nohouse , s.id.keep, :) = nan; % not possible to keep no house
 
   end % end of utility
 
@@ -655,8 +663,8 @@ methods (Static)
     %     tau: household type, scalar index
     %     house: house type, scalar index 
 
-    pkm = mp.p_fuel./mp.fe{house}*1000; % p_fuel is measured in 1000 DKK/l, mp.fe{j} is measured as km/l, but pkm was in DKK/km in regression)
-    
+    pkm = mp.p_fuel{house} * (mp.size{house}/130) *mp.fe{house} * (1 + mp.pkm_par).^(house_age); % p_fuel is measured in 1000 DKK/l, mp.fe{j} is measured as km/l, but pkm was in DKK/km in regression)
+  
     switch mp.modeltype
       case 'structuralform' % structural form - requires that mp.sp are set by trmodel.update_structural_par
         % evaluate utility 
@@ -664,9 +672,11 @@ methods (Static)
         - 1./(2*mp.sp.phi(tau)) .* (max(0,mp.sp.gamma_0(tau,house) + mp.sp.gamma_a(tau) .* house_age - pkm .* mp.mum{tau})).^2;
       case 'reducedform'
         if (mp.convexutility)
-        uv=mp.u_0{tau, house}+mp.u_a{tau, house}*house_age + exp(mp.u_a_sq{tau, house})*house_age.^2;
+        uv=mp.u_0{tau, house}+mp.u_a{tau, house}*house_age + exp(mp.u_a_sq{tau, house})*house_age.^2 + pkm/(mp.bet*(1-mp.sp.alpha_0(tau,house))) +  mp.size_par{tau} * mp.size{house};
+        
         else
-        uv=mp.u_0{tau, house}+mp.u_a{tau, house}*house_age + mp.u_a_sq{tau, house}*house_age.^2;
+        uv=mp.u_0{tau, house}+mp.u_a{tau, house}*house_age + mp.u_a_sq{tau, house}*house_age.^2 - mp.mum{tau} * pkm./(1-mp.bet) + mp.size_par{tau} * mp.size{house};
+        
         end
 
       otherwise 
@@ -677,6 +687,7 @@ methods (Static)
     % (after the first inspection at age 4)
     %inspection=(1-mod(car_age,2)).*car_age>=4; % dummy for inspection year
     %uv= uv+mp.u_even{tau,car}.*inspection; 
+
   end % end of u
 
   function [pbuy] = pbuy(mp, s, price_j)     
@@ -778,7 +789,7 @@ methods (Static)
     %disp(size(permute(deltaU,[2,1,3])))
     %  transition probability matrix
     delta=deltaT + deltaU +deltaTU+ deltaK; 
-
+        
     % sum of trades conditional on upgrading, used to add to calculate
     % total demand
     %deltaTU=permute(sum(deltaTU1,3),[1,2,3]);
@@ -831,7 +842,7 @@ methods (Static)
         v(:, [s.id.trade{:}], j)         =util(:,[s.id.trade{:}], j) + (mp.bet*F.trans([s.is.house{:}],:)*ev)';
     end
     %  calculate the values for keeping
-    v([s.is.house{:}],s.id.keep, s.id.keep)=    util([s.is.house{:}],s.id.keep, s.id.keep) + mp.bet*F.notrans([s.is.house{:}],:) *ev;
+    v([s.is.house{:}],s.id.keep, s.id.keep)=    util([s.is.house{:}],s.id.keep, s.id.keep) + mp.bet*F.notrans([s.is.house{:}],:) * ev;
 
     % calculate the values for all options involving buying a house but not
     % upgrading 
@@ -839,7 +850,8 @@ methods (Static)
 
     % calculate the values for all options involving upgrading a house but not
     % trading  
-    v(:, s.id.keep,[s.id.upgrade{:}])        =util(:, s.id.keep, [s.id.upgrade{:}]) + reshape((mp.bet* F.trans([s.is.house{:}],:)* ev), [1,1,size((mp.bet* F.trans([s.is.house{:}],:)* ev),1)]);
+    v(:, s.id.keep,[s.id.upgrade{:}])        =util(:, s.id.keep, [s.id.upgrade{:}]) + reshape((mp.bet* F.trans([s.is.house{:}],:)* ev)', [1,1,size((mp.bet* F.trans([s.is.house{:}],:)* ev),1)]);
+    %v(:, s.id.keep,[s.id.upgrade{:}])        =util(:, s.id.keep, [s.id.upgrade{:}]) + (mp.bet* F.trans([s.is.house{:}],:)* ev)';
     
     % calculate the values for the purge decision (ev of no house)
     v(:,s.id.purge, s.id.purge)               =util(:,s.id.purge)   + mp.bet * ev(s.is.nohouse);                     
@@ -847,7 +859,6 @@ methods (Static)
     v(isnan(util))=nan;
     % calculate expected values
     ev1= trmodel.logsum(v, mp.sigma); 
-    
     if nargout>1
       % calculate choice probabilities across all choices
       ccp=exp((v-ev1)/mp.sigma);

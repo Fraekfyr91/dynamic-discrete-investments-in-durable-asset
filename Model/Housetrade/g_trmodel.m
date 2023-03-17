@@ -201,7 +201,9 @@ methods (Static)
     [q, dq]=ergodic(ctp,permute(dctp,[1,2,4,3])); 
 
     % compute the derivative of excess demand  for all relevant ages of used cars that can be purchased
+    
     ded=g_trmodel.ded(mp, s, ccp, dccp, q, dq, ccp_scrap, dccp_scrap);
+   
   end % end of ded_tau
 
   function [du, dccp_scrap]=du(mp, s, tau, ccp_scrap, p, parameter_type)
@@ -295,7 +297,7 @@ methods (Static)
 
     % derivative of utility
     du=mp.mum{tau}*(reshape(dpsell.*(1-ccp_scrap) ,[s.ns, 1, s.nd, s.np])-reshape(dpbuy, [1, s.nd, s.nd, s.np]));
-    dpup(:,s.id.keep,[s.id.upgrade_used{:}],:) = mp.mum{tau};
+    du(:,:,[s.id.upgrade_used{:}],:) = mp.mum{tau};
     du(:,s.id.keep,s.id.keep,:)=0; 
 
   end % end of utility
@@ -392,6 +394,7 @@ methods (Static)
     % dlogccp_dp is computed as a choice probability weighted sum of derivatives (sum over choice alternatives)
     % assumes that infeasible choices have ccps and dvps = 0;
     dlogccp=(dvdp-sum(ccp.*dvdp, [2,3]))/mp.sigma;
+    dlogccp = fillmissing(dlogccp, 'constant', 0);
   end % end of dlogccp_dp
 
 
@@ -537,27 +540,27 @@ methods (Static)
     dTdp=sum(q.*dccp(:,s.id.keep,[s.id.upgrade_used{:}],:),1);
   
     dSdp=(dccp([s.is.house_ex_scrap{:}],s.id.keep,s.id.keep,:)).*(1-ccp_scrap([s.is.house_ex_scrap{:}],:)).*q([s.is.house_ex_scrap{:}]) ; % Add es here
+    %dedvt([s.ip{:}],:,s.id.keep) = permute(dDdp, [2,4,3,1]) +permute(dSdp,[1,4,3,2]) + permute(dTdp ,[3,4,2,1]) +...    % 1st term: partial derivative of excess demand wrt to change in ccps
+    %        +ccp(:,[s.id.trade_used{:}], s.id.keep)'*dq +  permute(ccp(:,s.id.keep,[s.id.upgrade_used{:}]), [3,1,2])*dq... % 2nd term can be done as a single matrix x matrix multiplication of ccp and dq 
+    %        -(1-ccp([s.is.house_ex_scrap{:}],s.id.keep)).*(1-ccp_scrap([s.is.house_ex_scrap{:}],:)).*dq([s.is.house_ex_scrap{:}],:) ...
+    %        +(1-ccp([s.is.house_ex_scrap{:}], s.id.keep)).*dccp_scrap([s.is.house_ex_scrap{:}]).*q([s.is.house_ex_scrap{:}]);
     
 
-    dedvt([s.ip{:}],:,:) = permute(dDdp, [2,4,3,1]) +permute(dSdp,[1,4,3,2]) ...    % 1st term: partial derivative of excess demand wrt to change in ccps
-        +ccp(:,[s.id.trade_used{:}])'*dq ... % 2nd term can be done as a single matrix x matrix multiplication of ccp and dq 
-        -(1-ccp([s.is.house_ex_scrap{:}],s.id.keep)).*(1-ccp_scrap([s.is.house_ex_scrap{:}],:)).*dq([s.is.house_ex_scrap{:}],:) ...
-        +(1-ccp([s.is.house_ex_scrap{:}], s.id.keep)).*dccp_scrap([s.is.house_ex_scrap{:}]).*q([s.is.house_ex_scrap{:}]);
-    
-    if 0 % new version (identical)
+   
       % ed=sum(ccp(s.tr.state,s.tr.choice(idx)).*q, 1)' - (1-ccp(idx, s.id.keep)).*(1-ccp_scrap(idx,:)).*q(idx);
-        ded=zeros(s.np,np);
-        idx=[s.is.car_ex_clunker{:}];
-        ded([s.ip{:}],:)= permute(sum(...
-                   q.*dccp(:,s.tr.choice(idx),:) + ccp(:,s.tr.choice(idx)).*permute(dq, [1, 3, 2]), ...
-                    1), [2, 3, 1]) ...
-                - (0-permute(dccp(idx, s.id.keep,:), [1, 3, 2])).*(1-ccp_scrap(idx,:))   .*q(idx) ...
-                - (1-ccp(idx, s.id.keep))                       .*(0-dccp_scrap(idx,:))  .*q(idx) ...
-                - (1-ccp(idx, s.id.keep))                       .*(1-ccp_scrap(idx,:))   .*dq(idx,:);
-       
-        % keyboard
-        dedvt=ded; 
-    end
+    ded=zeros(s.np,np);
+    idx=[s.is.house_ex_scrap{:}];
+   
+    ded([s.ip{:}],:)= permute(sum(...
+               q.*sum(dccp(:,s.tr.choice(idx),:),3) + ccp(:,s.tr.choice(idx)).*permute(dq, [1, 3, 2]), ...
+                1), [2, 3, 1]) ...
+            - (0-permute(sum(dccp(idx, s.id.keep,:),3), [1, 3, 2])).*(1-ccp_scrap(idx,:))   .*q(idx) ...
+            - (1-ccp(idx, s.id.keep))                       .*permute(sum((0-sum(dccp_scrap(idx,:,idx),2))),[1,3,2])  .*q(idx) ...
+            - (1-ccp(idx, s.id.keep))                       .*(1-ccp_scrap(idx,:))   .*dq(idx,:);
+   
+    % keyboard
+    dedvt=ded; 
+
 
   end % end of ded
 

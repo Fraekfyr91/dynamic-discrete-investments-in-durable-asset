@@ -62,14 +62,16 @@ methods (Static)
         w=w(1:abar_spp{t,house}+1);
         
         p_spp{t, house}=mp.pnew{house}-(w(1)-w)/mp.mum{t};
-       
+        
         w_spp{t, house}=w;
+        
         if spp.verbosity>0
-          fprintf('solved spp for housetype %i consumer type=%i abar_spp=%g\n',house,t,abar_spp{t,house});
+          fprintf('solved spp for housetype %i consumer type=% abar_spp=%g\n',house,t,abar_spp{t,house});
         end
 
       end % end of loop over consumer types
     end % end of loop over house types
+
   end % end of solve_spp
 
   function [V, P, dV, Eu]=bellman_spp(mp, V, t, house)
@@ -90,11 +92,15 @@ methods (Static)
     a=(0:abar-1)';    % ages, a=(0, 1, ,.. abar)
     ia=a+1;
 
-    urep = trmodel.u_house(mp, 0 ,t, house)- mp.mum{t}*(mp.pnew{house}-mp.pscrap{house});
+    urep = trmodel.u_house(mp, 0 ,t, house)- mp.mum{t}*(mp.pnew{house}-mp.pscrap{house}) - mp.mum{t} * mp.transcost ;
     ukeep = trmodel.u_house(mp, a,t, house);
+    uupkeep = trmodel.u_house(mp, a,t, house) - mp.mum{t} * (mp.pupfix + mp.pupgrade*a);
+    uuprep = trmodel.u_house(mp,a,t,house) - mp.mum{t}*(mp.pnew{house}-mp.pscrap{house}) - mp.mum{t} * mp.transcost - mp.mum{t} * (mp.pupfix + mp.pupgrade*a);
     vrep= urep +  mp.bet*V(2);
     vkeep = ukeep  +   mp.bet*(V(2:end));
-    V(1:end-1)=max(vrep, vkeep);
+    vupkeep = uupkeep + mp.bet*V(2);
+    vuprep = uuprep + mp.bet*V(2);
+    V(1:end-1)=max(vrep, max(vkeep, max(vuprep,vupkeep)));
     V(end)= vrep;
     
     if nargout>1  % Policy function (indicator for replacement)
@@ -109,7 +115,7 @@ methods (Static)
     end
 
     if nargout>3  % expect utility given policy rule (needed for dpsolver.policy)
-      Eu=P.*urep + (1-P).*[ukeep; urep];
+      Eu=P.*urep + (1-P).*[ukeep; urep; uupkeep; uuprep];
     end
   end % end bellman_spp
 
